@@ -7,6 +7,7 @@ namespace MediatR.NotificationPublishers;
 
 /// <summary>
 /// Uses Task.WhenAll with the list of Handler tasks:
+/// 将 Task.WhenAll 与处理程序任务列表一起使用
 /// <code>
 /// var tasks = handlers
 ///                .Select(handler => handler.Handle(notification, cancellationToken))

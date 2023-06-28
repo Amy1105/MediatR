@@ -6,6 +6,7 @@ namespace MediatR.NotificationPublishers;
 
 /// <summary>
 /// Awaits each notification handler in a single foreach loop:
+/// 在单个 foreach 循环中等待每个通知处理程序
 /// <code>
 /// foreach (var handler in handlers) {
 ///     await handler(notification, cancellationToken);
