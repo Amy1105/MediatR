@@ -1,8 +1,10 @@
 using System;
 using System.Linq;
 using MediatR;
+using MediatR.Licensing;
 using MediatR.Pipeline;
 using MediatR.Registration;
+using Microsoft.Extensions.Logging;
 
 namespace Microsoft.Extensions.DependencyInjection;
 
@@ -15,7 +17,7 @@ namespace Microsoft.Extensions.DependencyInjection;
 /// This does not scan for any <see cref="IPipelineBehavior{TRequest,TResponse}"/> instances including <see cref="RequestPreProcessorBehavior{TRequest,TResponse}"/> and <see cref="RequestPreProcessorBehavior{TRequest,TResponse}"/>.
 /// To register behaviors, use the <see cref="ServiceCollectionServiceExtensions.AddTransient(IServiceCollection,Type,Type)"/> with the open generic or closed generic types.
 /// </summary>
-public static class ServiceCollectionExtensions
+public static class MediatRServiceCollectionExtensions
 {
     /// <summary>
     /// Registers handlers and mediator types from the specified assemblies
@@ -47,10 +49,32 @@ public static class ServiceCollectionExtensions
             throw new ArgumentException("No assemblies found to scan. Supply at least one assembly to scan for handlers.");
         }
 
-        ServiceRegistrar.AddMediatRClasses(services, configuration);
+        ServiceRegistrar.SetGenericRequestHandlerRegistrationLimitations(configuration);
+
+        ServiceRegistrar.AddMediatRClassesWithTimeout(services, configuration);
 
         ServiceRegistrar.AddRequiredServices(services, configuration);
 
         return services;
     }
+    
+    internal static void CheckLicense(this IServiceProvider serviceProvider)
+    {
+        if (LicenseChecked == false)
+        {
+            var licenseAccessor = serviceProvider.GetService<LicenseAccessor>() ?? new LicenseAccessor(
+                serviceProvider.GetRequiredService<MediatRServiceConfiguration>(),
+                serviceProvider.GetRequiredService<ILoggerFactory>()
+            );
+            var licenseValidator = serviceProvider.GetService<LicenseValidator>() 
+                                   ?? new LicenseValidator(serviceProvider.GetRequiredService<ILoggerFactory>());
+            
+            var license = licenseAccessor.Current;
+            licenseValidator.Validate(license);
+        }
+
+        LicenseChecked = true;
+    }
+
+    internal static bool LicenseChecked { get; set; }
 }

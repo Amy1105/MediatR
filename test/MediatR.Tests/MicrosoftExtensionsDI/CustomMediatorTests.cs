@@ -14,6 +14,7 @@ public class CustomMediatorTests
     public CustomMediatorTests()
     {
         IServiceCollection services = new ServiceCollection();
+        services.AddFakeLogging();
         services.AddSingleton(new Logger());
         services.AddMediatR(cfg =>
         {
@@ -39,14 +40,14 @@ public class CustomMediatorTests
     [Fact]
     public void ShouldResolveNotificationHandlers()
     {
-        _provider.GetServices<INotificationHandler<Pinged>>().Count().ShouldBe(3);
+        _provider.GetServices<INotificationHandler<Pinged>>().Count().ShouldBe(4);
     }
 
     [Fact]
     public void Can_Call_AddMediatr_multiple_times()
     {
         IServiceCollection services = new ServiceCollection();
-        services.AddSingleton(new Logger());
+        services.AddFakeLogging();
         services.AddMediatR(cfg =>
         {
             cfg.MediatorImplementationType = typeof(MyCustomMediator);

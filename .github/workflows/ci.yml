@@ -5,31 +5,37 @@ on:
     branches:
     - master
   pull_request:
-    branches:
-      - master
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  MINVERBUILDMETADATA: build.${{ github.run_id }}.${{ github.run_attempt}}
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     steps:
     - name: Checkout
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4.2.0
       with:
         fetch-depth: 0
-    - name: Setup dotnet 6.0
-      uses: actions/setup-dotnet@v1
+        filter: tree:0
+    - name: Setup dotnet
+      uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: '6.0.x'
+        dotnet-version: |
+          8.0.x
+          9.0.x
     - name: Build and Test
       run: ./Build.ps1
       shell: pwsh
     - name: Push to MyGet
+      if: github.ref == 'refs/heads/master'
       env:
-        NUGET_URL: https://www.myget.org/F/mediatr-ci/api/v3/index.json
-        NUGET_API_KEY: ${{ secrets.MYGET_MEDIATR_CI_API_KEY }}
+        NUGET_URL: https://f.feedz.io/lucky-penny-software/mediatr/nuget/index.json
+        NUGET_API_KEY: ${{ secrets.FEEDZIO_ACCESS_TOKEN }}
       run: ./Push.ps1
       shell: pwsh
     - name: Artifacts
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
         name: artifacts
         path: artifacts/**/*

@@ -14,7 +14,7 @@ public class DuplicateAssemblyResolutionTests
     public DuplicateAssemblyResolutionTests()
     {
         IServiceCollection services = new ServiceCollection();
-        services.AddSingleton(new Logger());
+        services.AddFakeLogging();
         services.AddMediatR(cfg => cfg.RegisterServicesFromAssemblies(typeof(Ping).Assembly, typeof(Ping).Assembly));
         _provider = services.BuildServiceProvider();
     }
@@ -22,6 +22,6 @@ public class DuplicateAssemblyResolutionTests
     [Fact]
     public void ShouldResolveNotificationHandlersOnlyOnce()
     {
-        _provider.GetServices<INotificationHandler<Pinged>>().Count().ShouldBe(3);
+        _provider.GetServices<INotificationHandler<Pinged>>().Count().ShouldBe(4);
     }
 }

@@ -1,12 +1,10 @@
 ﻿using System.Runtime.CompilerServices;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace MediatR.Extensions.Microsoft.DependencyInjection.Tests;
 
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Pipeline;
@@ -397,6 +395,7 @@ public class PipelineTests
         var output = new Logger();
         IServiceCollection services = new ServiceCollection();
         services.AddSingleton(output);
+        services.AddFakeLogging();
         services.AddMediatR(cfg =>
         {
             cfg.RegisterServicesFromAssembly(typeof(Ping).Assembly);
@@ -427,6 +426,7 @@ public class PipelineTests
         var output = new Logger();
         IServiceCollection services = new ServiceCollection();
         services.AddSingleton(output);
+        services.AddFakeLogging();
         services.AddMediatR(cfg =>
         {
             // Call these registration methods multiple times to prove we don't register a service if it is already registered
@@ -461,6 +461,7 @@ public class PipelineTests
         var output = new Logger();
         IServiceCollection services = new ServiceCollection();
         services.AddSingleton(output);
+        services.AddFakeLogging();
         services.AddMediatR(cfg =>
         {
             cfg.RegisterServicesFromAssembly(typeof(Ping).Assembly);
@@ -500,6 +501,7 @@ public class PipelineTests
     {
         var output = new Logger();
         IServiceCollection services = new ServiceCollection();
+        services.AddFakeLogging();
         services.AddSingleton(output);
         services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Ping).Assembly));
         var provider = services.BuildServiceProvider();
@@ -518,6 +520,7 @@ public class PipelineTests
         var output = new Logger();
         IServiceCollection services = new ServiceCollection();
         services.AddSingleton(output);
+        services.AddFakeLogging();
         services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Ping).Assembly));
         var provider = services.BuildServiceProvider();
 
@@ -535,6 +538,7 @@ public class PipelineTests
         var output = new Logger();
         IServiceCollection services = new ServiceCollection();
         services.AddSingleton(output);
+        services.AddFakeLogging();
         services.AddMediatR(cfg =>
         {
             cfg.RegisterServicesFromAssembly(typeof(Ping).Assembly);
@@ -555,6 +559,7 @@ public class PipelineTests
     {
         var output = new Logger();
         IServiceCollection services = new ServiceCollection();
+        services.AddFakeLogging();
         services.AddSingleton(output);
         services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(typeof(Ping).Assembly));
         var provider = services.BuildServiceProvider();
@@ -573,6 +578,7 @@ public class PipelineTests
         var output = new Logger();
         IServiceCollection services = new ServiceCollection();
         services.AddSingleton(output);
+        services.AddFakeLogging();
         services.AddMediatR(cfg =>
         {
             cfg.RegisterServicesFromAssembly(typeof(Ping).Assembly);
@@ -841,6 +847,224 @@ public class PipelineTests
         {
             services.AddMediatR(cfg);
             services.BuildServiceProvider();
+        });
+    }
+
+    [Fact]
+    public void Should_auto_register_processors_when_configured_including_all_concrete_types()
+    {
+        var cfg = new MediatRServiceConfiguration
+        {
+            AutoRegisterRequestProcessors = true
+        };
+
+        var output = new Logger();
+        IServiceCollection services = new ServiceCollection();
+        services.AddSingleton(output);
+
+        cfg.RegisterServicesFromAssemblyContaining<Ping>();
+
+        services.AddMediatR(cfg);
+
+        var provider = services.BuildServiceProvider();
+
+        var preProcessors = provider.GetServices(typeof(IRequestPreProcessor<Ping>)).ToList();
+        preProcessors.Count.ShouldBeGreaterThan(0);
+        preProcessors.ShouldContain(p => p != null && p.GetType() == typeof(FirstConcretePreProcessor));
+        preProcessors.ShouldContain(p => p != null && p.GetType() == typeof(NextConcretePreProcessor));
+
+        var postProcessors = provider.GetServices(typeof(IRequestPostProcessor<Ping, Pong>)).ToList();
+        postProcessors.Count.ShouldBeGreaterThan(0);
+        postProcessors.ShouldContain(p => p != null && p.GetType() == typeof(FirstConcretePostProcessor));
+        postProcessors.ShouldContain(p => p != null && p.GetType() == typeof(NextConcretePostProcessor));
+    }
+
+
+    public sealed record FooRequest : IRequest;
+    
+    public interface IBlogger<T>
+    {
+        IList<string> Messages { get; }
+    }
+
+    public class Blogger<T> : IBlogger<T>
+    {
+        private readonly Logger _logger;
+
+        public Blogger(Logger logger)
+        {
+            _logger = logger;
+        }
+
+        public IList<string> Messages => _logger.Messages;
+    }
+
+    public sealed class FooRequestHandler : IRequestHandler<FooRequest> {
+        public FooRequestHandler(IBlogger<FooRequestHandler> logger)
+        {
+            this.logger = logger;
+        }
+
+        readonly IBlogger<FooRequestHandler> logger;
+
+        public Task Handle(FooRequest request, CancellationToken cancellationToken) {
+            logger.Messages.Add("Invoked Handler");
+            return Task.CompletedTask;
+        }
+    }
+
+    sealed class ClosedBehavior : IPipelineBehavior<FooRequest, Unit> {
+        public ClosedBehavior(IBlogger<ClosedBehavior> logger)
+        {
+            this.logger = logger;
+        }
+
+        readonly IBlogger<ClosedBehavior> logger;
+
+        public Task<Unit> Handle(FooRequest request, RequestHandlerDelegate<Unit> next, CancellationToken cancellationToken) {
+            logger.Messages.Add("Invoked Closed Behavior");
+            return next();
+        }
+    }
+
+    sealed class Open2Behavior<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>
+        where TRequest : notnull {
+        public Open2Behavior(IBlogger<Open2Behavior<TRequest, TResponse>> logger) {
+            this.logger = logger;
+        }
+
+        readonly IBlogger<Open2Behavior<TRequest, TResponse>> logger;
+
+        public Task<TResponse> Handle(TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken) {
+            logger.Messages.Add("Invoked Open Behavior");
+            return next();
+        }
+    }
+    [Fact]
+    public async Task Should_register_correctly()
+    {
+        var services = new ServiceCollection();
+        services.AddMediatR(cfg =>
+        {
+            cfg.RegisterServicesFromAssemblyContaining<FooRequest>();
+            cfg.AddBehavior<ClosedBehavior>();
+            cfg.AddOpenBehavior(typeof(Open2Behavior<,>));
+        });
+        services.AddFakeLogging();
+        var logger = new Logger();
+        services.AddSingleton(logger);
+        services.AddSingleton(new MediatR.Tests.PipelineTests.Logger());
+        services.AddSingleton(new MediatR.Tests.StreamPipelineTests.Logger());
+        services.AddSingleton(new MediatR.Tests.SendTests.Dependency());
+        services.AddSingleton<System.IO.TextWriter>(new System.IO.StringWriter());
+        services.AddTransient(typeof(IBlogger<>), typeof(Blogger<>));
+        var provider = services.BuildServiceProvider(new ServiceProviderOptions
+        {
+            ValidateOnBuild = true
+        });
+
+        var mediator = provider.GetRequiredService<IMediator>();
+        var request = new FooRequest();
+        await mediator.Send(request);
+        
+        logger.Messages.ShouldBe(new []
+        {
+            "Invoked Closed Behavior",
+            "Invoked Open Behavior",
+            "Invoked Handler",
+        });
+    }
+
+
+    #region OpenBehaviorsForMultipleRegistration
+    sealed class OpenBehaviorMultipleRegistration0<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>
+        where TRequest : notnull
+    {
+        public OpenBehaviorMultipleRegistration0(IBlogger<OpenBehaviorMultipleRegistration0<TRequest, TResponse>> logger)
+        {
+            this.logger = logger;
+        }
+
+        readonly IBlogger<OpenBehaviorMultipleRegistration0<TRequest, TResponse>> logger;
+
+        public Task<TResponse> Handle(TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken)
+        {
+            logger.Messages.Add("Invoked OpenBehaviorMultipleRegistration0");
+            return next();
+        }
+    }
+    sealed class OpenBehaviorMultipleRegistration1<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>
+        where TRequest : notnull
+    {
+        public OpenBehaviorMultipleRegistration1(IBlogger<OpenBehaviorMultipleRegistration1<TRequest, TResponse>> logger)
+        {
+            this.logger = logger;
+        }
+
+        readonly IBlogger<OpenBehaviorMultipleRegistration1<TRequest, TResponse>> logger;
+
+        public Task<TResponse> Handle(TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken)
+        {
+            logger.Messages.Add("Invoked OpenBehaviorMultipleRegistration1");
+            return next();
+        }
+    }
+    sealed class OpenBehaviorMultipleRegistration2<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>
+        where TRequest : notnull
+    {
+        public OpenBehaviorMultipleRegistration2(IBlogger<OpenBehaviorMultipleRegistration2<TRequest, TResponse>> logger)
+        {
+            this.logger = logger;
+        }
+
+        readonly IBlogger<OpenBehaviorMultipleRegistration2<TRequest, TResponse>> logger;
+
+        public Task<TResponse> Handle(TRequest request, RequestHandlerDelegate<TResponse> next, CancellationToken cancellationToken)
+        {
+            logger.Messages.Add("Invoked OpenBehaviorMultipleRegistration2");
+            return next();
+        }
+    }
+    #endregion OpenBehaviorsForMultipleRegistration
+
+    [Fact]
+    public async Task Should_register_open_behaviors_correctly()
+    {
+        var behaviorTypeList = new List<Type>
+        {
+            typeof(OpenBehaviorMultipleRegistration0<,>),
+            typeof(OpenBehaviorMultipleRegistration1<,>),
+            typeof(OpenBehaviorMultipleRegistration2<,>)
+        };
+        var services = new ServiceCollection();
+        services.AddMediatR(cfg =>
+        {
+            cfg.RegisterServicesFromAssemblyContaining<FooRequest>();
+            cfg.AddOpenBehaviors(behaviorTypeList);
+        });
+        services.AddFakeLogging();
+        var logger = new Logger();
+        services.AddSingleton(logger);
+        services.AddSingleton(new MediatR.Tests.PipelineTests.Logger());
+        services.AddSingleton(new MediatR.Tests.StreamPipelineTests.Logger());
+        services.AddSingleton(new MediatR.Tests.SendTests.Dependency());
+        services.AddSingleton<System.IO.TextWriter>(new System.IO.StringWriter());
+        services.AddTransient(typeof(IBlogger<>), typeof(Blogger<>));
+        var provider = services.BuildServiceProvider(new ServiceProviderOptions
+        {
+            ValidateOnBuild = true
+        });
+
+        var mediator = provider.GetRequiredService<IMediator>();
+        var request = new FooRequest();
+        await mediator.Send(request);
+
+        logger.Messages.ShouldBe(new[]
+        {
+            "Invoked OpenBehaviorMultipleRegistration0",
+            "Invoked OpenBehaviorMultipleRegistration1",
+            "Invoked OpenBehaviorMultipleRegistration2",
+            "Invoked Handler",
         });
     }
 }

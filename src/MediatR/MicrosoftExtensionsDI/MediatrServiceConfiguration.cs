@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using MediatR;
+using MediatR.Entities;
 using MediatR.NotificationPublishers;
 using MediatR.Pipeline;
 using MediatR.Registration;
@@ -63,6 +64,41 @@ public class MediatRServiceConfiguration
     /// List of request post processors to register in specific order
     /// </summary>
     public List<ServiceDescriptor> RequestPostProcessorsToRegister { get; } = new();
+
+    /// <summary>
+    /// Automatically register processors during assembly scanning
+    /// </summary>
+    public bool AutoRegisterRequestProcessors { get; set; }
+
+    /// <summary>
+    /// Configure the maximum number of type parameters that a generic request handler can have. To Disable this constraint, set the value to 0.
+    /// </summary>
+    public int MaxGenericTypeParameters { get; set; } = 10;
+
+    /// <summary>
+    /// Configure the maximum number of types that can close a generic request type parameter constraint.  To Disable this constraint, set the value to 0.
+    /// </summary>
+    public int MaxTypesClosing { get; set; } = 100;
+
+    /// <summary>
+    /// Configure the Maximum Amount of Generic RequestHandler Types MediatR will try to register.  To Disable this constraint, set the value to 0.
+    /// </summary>
+    public int MaxGenericTypeRegistrations { get; set; } = 125000;
+
+    /// <summary>
+    /// Configure the Timeout in Milliseconds that the GenericHandler Registration Process will exit with error.  To Disable this constraint, set the value to 0.
+    /// </summary>
+    public int RegistrationTimeout { get; set; } = 15000;
+
+    /// <summary>
+    /// Flag that controlls whether MediatR will attempt to register handlers that containg generic type parameters.
+    /// </summary>
+    public bool RegisterGenericHandlers { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets the license key. You can find your license key in your <a href="https://luckypennysoftware.com/account">account</a>.
+    /// </summary>
+    public string? LicenseKey { get; set; }
 
     /// <summary>
     /// Register various handlers from assembly containing given type
@@ -192,6 +228,37 @@ public class MediatRServiceConfiguration
         return this;
     }
 
+    /// <summary>
+    /// Registers multiple open behavior types against the <see cref="IPipelineBehavior{TRequest,TResponse}"/> open generic interface type
+    /// </summary>
+    /// <param name="openBehaviorTypes">An open generic behavior type list includes multiple open generic behavior types.</param>
+    /// <param name="serviceLifetime">Optional service lifetime, defaults to <see cref="ServiceLifetime.Transient"/>.</param>
+    /// <returns>This</returns>
+    public MediatRServiceConfiguration AddOpenBehaviors(IEnumerable<Type> openBehaviorTypes, ServiceLifetime serviceLifetime = ServiceLifetime.Transient)
+    {
+        foreach (var openBehaviorType in openBehaviorTypes)
+        {
+            AddOpenBehavior(openBehaviorType, serviceLifetime);
+        }
+
+        return this;
+    }
+
+    /// <summary>
+    /// Registers open behaviors against the <see cref="IPipelineBehavior{TRequest,TResponse}"/> open generic interface type
+    /// </summary>
+    /// <param name="openBehaviors">An open generic behavior list includes multiple <see cref="OpenBehavior"/> open generic behaviors.</param>
+    /// <returns>This</returns>
+    public MediatRServiceConfiguration AddOpenBehaviors(IEnumerable<OpenBehavior> openBehaviors)
+    {
+        foreach (var openBehavior in openBehaviors)
+        {
+            AddOpenBehavior(openBehavior.OpenBehaviorType!, openBehavior.ServiceLifetime);
+        }
+
+        return this;
+    }
+    
     /// <summary>
     /// Register a closed stream behavior type
     /// </summary>
